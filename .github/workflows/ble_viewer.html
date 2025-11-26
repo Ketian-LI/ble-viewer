@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>UNO R4 BLE 数据接收与输出</title>
+  <style>
+    body { font-family: sans-serif; padding: 16px; }
+    #log {
+      width: 100%;
+      height: 300px;
+      border: 1px solid #ccc;
+      white-space: pre;
+      overflow: auto;
+      padding: 8px;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+  <h1>UNO R4 BLE 数据接收</h1>
+  <button id="btnConnect">连接蓝牙</button>
+  <button id="btnClear">清空显示</button>
+
+  <h2>收到的数据（这是你说的“再输出”之一）</h2>
+  <div id="log"></div>
+
+  <script>
+    // 👇 换成你 Arduino 里用的 UUID
+    const serviceUUID = '12345678-1234-5678-1234-56789abcdef0';
+    const charUUID    = '12345678-1234-5678-1234-56789abcdef1';
+
+    const logDiv = document.getElementById('log');
+    const btnConnect = document.getElementById('btnConnect');
+    const btnClear = document.getElementById('btnClear');
+
+    let characteristic = null;
+
+    function log(text) {
+      logDiv.textContent += text + '\n';
+      logDiv.scrollTop = logDiv.scrollHeight;
+      console.log(text);
+    }
+
+    // 连接 BLE 设备
+    async function connectBLE() {
+      try {
+        const device = await navigator.bluetooth.requestDevice({
+          filters: [{ name: 'UNO_R4_BLE' }],  // 如果名字不同，改这里
+          optionalServices: [serviceUUID]
+        });
+
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService(serviceUUID);
+        characteristic = await service.getCharacteristic(charUUID);
+
+        await characteristic.startNotifications();
+        characteristic.addEventListener(
+          'characteristicvaluechanged',
+          handleNotification
+        );
+
+        log('✅ 已连接：' + device.name);
+      } catch (err) {
+        console.error(err);
+        log('❌ 连接失败：' + err);
+      }
+    }
+
+    // 🔥🔥🔥 所有收到的数据都会从这里“路过”
+    function handleNotification(event) {
+      const value = event.target.value;
+      const decoder = new TextDecoder();
+      const text = decoder.decode(value); // 如果你发的是字符串
+      // const num = value.getUint16(0, true); // 如果你发的是整数
+
+      // 1）先在网页上输出（你现在已经看得到的那种效果）
+      log('收到：' + text);
+
+      // 2）在这里做“再次输出”的动作：
+      //    你可以选一种方式——保存文件 / 发到服务器 / 转给别的程序
+
+      // 示例 A：追加到一个隐藏数组，后面点按钮导出 CSV
+      // receivedData.push(text);
+
+      // 示例 B：通过 HTTP POST 发到你的服务器
+      // fetch('https://your-server.example.com/api/data', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({ value: text, time: Date.now() })
+      // });
+
+      // 示例 C（进阶）：通过 Web Serial 再发给另一块 Arduino（只在 Chrome 支持）
+      // if (serialWriter) {
+      //   serialWriter.write(text + '\n');
+      // }
+    }
+
+    btnConnect.addEventListener('click', connectBLE);
+    btnClear.addEventListener('click', () => { logDiv.textContent = ''; });
+  </script>
+</body>
+</html>
